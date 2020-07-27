@@ -3,38 +3,25 @@
 package com.google.gcp_variant_transforms.entity;
 
 import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.vcf.VCFHeader;
 import java.io.Serializable;
 
 /**
  * Internal representation of Variant Data.
+ * Variant inherits from {@link VariantContext} which is serializable
+ * And Variant also stores the header information of the VCF file.
  */
-public class Variant implements Serializable {
+public class Variant extends VariantContext implements Serializable {
   private static final long serialVersionUID = 260660913763642347L;
 
-    private final String contig;
-    private final int start;
-    private final int end;
+  private VCFHeader vcfHeader;
 
-    public Variant(String contig, int start, int end) {
-      // TODO: extend to full representation of Variant row.
-      this.contig = contig;
-      this.start = start;
-      this.end = end;
-    }
+  public Variant(VariantContext variantContext, VCFHeader vcfHeader) {
+    super(variantContext);
+    this.vcfHeader = vcfHeader;
+  }
 
-    public Variant(VariantContext variantContext) {
-      this(variantContext.getContig(), variantContext.getStart(), variantContext.getEnd());
-    }
-
-    public String getContig() {
-      return contig;
-    }
-
-    public int getStart() {
-      return start;
-    }
-
-    public int getEnd() {
-      return end;
-    }
+  public VCFHeader getHeader() {
+    return this.vcfHeader;
+  }
 }

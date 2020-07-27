@@ -6,54 +6,43 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import htsjdk.variant.variantcontext.Allele;
+import htsjdk.variant.variantcontext.GenotypesContext;
 import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.vcf.VCFHeader;
+import org.junit.Before;
 import org.junit.Test;
+import java.util.Collections;
 
 /**
  * Unit tests for Variant.java
  */
 public class VariantTest {
 
-  @Test
-  public void testGetContig_whenComparingString_thenTrue() {
-    String contig = "one";
-    Variant testVariant = new Variant(contig, 1, 5);
+  VariantContext variantContext;
 
-    assertThat(testVariant.getContig().equals(contig)).isTrue();
+  @Before
+  public void mockVariantContext() {
+    variantContext = mock(VariantContext.class);
+    Allele allele = mock(Allele.class);
+    GenotypesContext genotypesContext = mock(GenotypesContext.class);
+
+    // The following fields cannot be null in VariantContext
+    when(variantContext.getContig()).thenReturn("20");
+    when(variantContext.getStart()).thenReturn(1);
+    when(variantContext.getEnd()).thenReturn(2);
+    when(variantContext.getSource()).thenReturn(".");
+    when(variantContext.getID()).thenReturn(".");
+    when(variantContext.getAlleles()).thenReturn(Collections.singletonList(allele));
+    when(variantContext.getGenotypes()).thenReturn(genotypesContext);
   }
 
   @Test
-  public void testGetStart_whenComparingString_thenTrue() {
-    int start = 14370;
-    Variant testVariant = new Variant("one", start, 14374);
+  public void testGetHeader_whenComparingElements_thenTrue() {
+    VCFHeader header = mock(VCFHeader.class);
 
-    assertThat(testVariant.getStart() == start).isTrue();
-  }
+    Variant testVariant = new Variant(variantContext, header);
 
-  @Test
-  public void testGetEnd_whenComparingString_thenTrue() {
-    int end = 14375;
-    Variant testVariant = new Variant("one", 14371, end);
-
-    assertThat(testVariant.getEnd() == end).isTrue();
-  }
-
-  @Test
-  public void testVariantConstructor_whenCompareFields_thenTrue() {
-    VariantContext mockVariantContext = mock(VariantContext.class);
-
-    // mock VariantContext fields
-    int start = 14370;
-    int end = 14375;
-    String contig = "one";
-    when(mockVariantContext.getStart()).thenReturn(start);
-    when(mockVariantContext.getEnd()).thenReturn(end);
-    when(mockVariantContext.getContig()).thenReturn(contig);
-
-    Variant testVariant = new Variant(mockVariantContext);
-
-    assertThat(testVariant.getContig().equals(contig)).isTrue();
-    assertThat(testVariant.getStart() == start).isTrue();
-    assertThat(testVariant.getEnd() == end).isTrue();
+    assertThat(testVariant.getHeader()).isEqualTo(header);
   }
 }
