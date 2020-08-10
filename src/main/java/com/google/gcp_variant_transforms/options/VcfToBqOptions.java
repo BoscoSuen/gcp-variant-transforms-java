@@ -25,4 +25,9 @@ public interface VcfToBqOptions extends PipelineOptions {
   @Description("Path of the file to write to")
   String getOutput();
   void setOutput(String value);
+
+  /** Set the Dataset in BigQuery .*/
+  @Description("Set BigQuery Dataset")
+  String getDataset();
+  void setDataset(String value);
 }
