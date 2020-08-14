@@ -53,7 +53,7 @@ public final class VcfToBqPipelineRunner implements PipelineRunner {
                             context.getVCFHeader())));
 
     tableRowPCollection.apply("WriteTableRowToBigQuery",
-            BigQueryIO.writeTableRows().to(options.getDataset())
+            BigQueryIO.writeTableRows().to(context.getOutput())
                     .withSchema(schema)
                     .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
                     .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED));
