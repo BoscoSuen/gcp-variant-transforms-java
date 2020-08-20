@@ -13,6 +13,7 @@ import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFHeaderLineCount;
 import htsjdk.variant.vcf.VCFHeaderLineType;
 import htsjdk.variant.vcf.VCFInfoHeaderLine;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -23,7 +24,7 @@ import java.util.Set;
 /**
  * Utility methods for write values with defined value type into Big Query rows.
  */
-public class VariantToBqUtilsImpl implements VariantToBqUtils {
+public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
   public String getReferenceBases(VariantContext variantContext) {
     Allele referenceAllele = variantContext.getReference();
     // If the ref length is longer than 1, store the ref as a String.
@@ -78,9 +79,17 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils {
       VCFInfoHeaderLine infoMetadata = vcfHeader.getInfoHeaderLine(attrName);
       VCFHeaderLineType infoType = infoMetadata.getType();
       VCFHeaderLineCount infoCountType = infoMetadata.getCountType();
-      if (infoCountType == VCFHeaderLineCount.A) {
-        // Put this info into ALT field.
-        splitAlternateAlleleInfoFields(attrName, value, altMetadata, infoType);
+      if (infoCountType == VCFHeaderLineCount.A || infoCountType == VCFHeaderLineCount.R) {
+        // If alternate field is ".", alternate alleles will be empty, expected count will be 1
+        int expectedAltCount = variantContext.getAlternateAlleles().size() == 0 ? 1 :
+            variantContext.getAlternateAlleles().size();
+        if (infoCountType == VCFHeaderLineCount.A) {
+          // Put this info into ALT field.
+          splitAlternateAlleleInfoFields(attrName, value, altMetadata, infoType, expectedAltCount);
+        } else {
+          // field count should count all alleles, which is expectedAltCount plus reference.
+          row.set(attrName, convertToDefinedType(value, infoType, expectedAltCount + 1));
+        }
       } else if (infoCountType == VCFHeaderLineCount.INTEGER){
         row.set(attrName, convertToDefinedType(value, infoType, infoMetadata.getCount()));
       } else {
@@ -118,7 +127,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils {
       } else if (count > 1) {
         // value is a single value but count > 1, it should raise an exception
         throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-                "VCFHeader");
+            "VCFHeader");
       } else {
         return convertSingleObjectToDefinedType(value, type);
       }
@@ -127,7 +136,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils {
       List<Object> valueList = (List<Object>)value;
       if (count != Constants.DEFAULT_FIELD_COUNT &&count != valueList.size()) {
         throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-                "VCFHeader");
+            "VCFHeader");
       }
       List<Object> convertedList = new ArrayList<>();
       for (Object val : valueList) {
@@ -214,10 +223,14 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils {
   }
 
   public void splitAlternateAlleleInfoFields(String attrName, Object value,
-                                                     List<TableRow> altMetadata,
-                                                     VCFHeaderLineType type) {
+                                             List<TableRow> altMetadata,
+                                             VCFHeaderLineType type, int count) {
     if (value instanceof List) {
       List<Object> valList = (List<Object>)value;
+      if (count != valList.size()) {
+        throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
+            "VCFHeader");
+      }
       // If the alt field element size > 1, thus the value should be list and the size should be
       // equal to the alt field size.
       // But if alt field is ".", the altMetadata has only one TableRow with {"alt": null},
@@ -234,6 +247,10 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils {
         altMetadata.get(i).set(attrName, convertSingleObjectToDefinedType(valList.get(i), type));
       }
     } else {
+      if (count != 1) {
+        throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
+            "VCFHeader");
+      }
       // The alt field element size == 1, thus the value should be a single list.
       altMetadata.get(0).set(attrName, convertSingleObjectToDefinedType(value, type));
     }

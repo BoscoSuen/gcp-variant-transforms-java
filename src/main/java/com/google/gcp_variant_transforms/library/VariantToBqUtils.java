@@ -32,5 +32,6 @@ public interface VariantToBqUtils {
   public void addInfoAndPhaseSet(TableRow row, Genotype genotype, VCFHeader vcfHeader);
 
   public void splitAlternateAlleleInfoFields(String attrName, Object value,
-                                             List<TableRow> altMetadata, VCFHeaderLineType type);
+                                             List<TableRow> altMetadata, VCFHeaderLineType type,
+                                             int count);
 }
