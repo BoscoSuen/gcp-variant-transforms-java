@@ -4,6 +4,7 @@ package com.google.gcp_variant_transforms.library;
 
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.gcp_variant_transforms.common.Constants;
+import com.google.inject.Inject;
 import htsjdk.variant.variantcontext.VariantContext;
 import htsjdk.variant.vcf.VCFHeader;
 import java.io.Serializable;
@@ -16,6 +17,9 @@ import java.util.List;
  */
 public class BigQueryRowGeneratorImpl implements BigQueryRowGenerator, Serializable {
 
+  @Inject
+  VariantToBqUtils variantToBqUtils;
+
   public TableRow convertToBQRow(VariantContext variantContext, VCFHeader vcfHeader) {
     TableRow row = new TableRow();
 
@@ -24,21 +28,21 @@ public class BigQueryRowGeneratorImpl implements BigQueryRowGenerator, Serializa
     row.set(Constants.ColumnKeyConstants.END_POSITION, variantContext.getEnd());
 
     row.set(Constants.ColumnKeyConstants.REFERENCE_BASES,
-        VariantToBqUtils.getReferenceBases(variantContext));
-    row.set(Constants.ColumnKeyConstants.NAMES, VariantToBqUtils.getNames(variantContext));
+            variantToBqUtils.getReferenceBases(variantContext));
+    row.set(Constants.ColumnKeyConstants.NAMES, variantToBqUtils.getNames(variantContext));
 
     // Write alt field and info field to BQ row.
-    List<TableRow> altMetadata = VariantToBqUtils.getAlternateBases(variantContext);
+    List<TableRow> altMetadata = variantToBqUtils.getAlternateBases(variantContext);
     // AltMetadata should contain Info fields with Number='A' tag, then be added to the row.
     // The rest of Info fields will be directly added to the base BQ row.
-    VariantToBqUtils.addInfo(row, variantContext, altMetadata, vcfHeader);
+    variantToBqUtils.addInfo(row, variantContext, altMetadata, vcfHeader);
     row.set(Constants.ColumnKeyConstants.ALTERNATE_BASES, altMetadata);
 
     row.set(Constants.ColumnKeyConstants.QUALITY, variantContext.getPhredScaledQual());
-    row.set(Constants.ColumnKeyConstants.FILTER, VariantToBqUtils.getFilters(variantContext));
+    row.set(Constants.ColumnKeyConstants.FILTER, variantToBqUtils.getFilters(variantContext));
 
     // Write calls to BQ row.
-    List<TableRow> callRows = VariantToBqUtils.addCalls(variantContext, vcfHeader);
+    List<TableRow> callRows = variantToBqUtils.addCalls(variantContext, vcfHeader);
     row.set(Constants.ColumnKeyConstants.CALLS, callRows);
 
     return row;

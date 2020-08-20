@@ -158,14 +158,13 @@ public class BigQueryRowGeneratorTest {
   @Test
   public void testBigQueryRowWithEmptyFields_whenCheckingRowElements_thenTrue() {
     // ID field is ".", which should be null in the BQ row.
-    assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.NAMES)).isEqualTo(null);
+    assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.NAMES)).isNull();
 
     // Quality field is ".", which should be -10 in the BQ row.
     assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.QUALITY))
         .isEqualTo(UNKNOWN_QUALITY);
 
-    assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.FILTER))
-        .isEqualTo(DEFAULT_FILTER);
+    assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.FILTER)).isNull();
 
     // ALT field is ".", which should be null in the BQ row.
     List<TableRow> emptyAltMetadata = (List<TableRow>) rowWithEmptyFields

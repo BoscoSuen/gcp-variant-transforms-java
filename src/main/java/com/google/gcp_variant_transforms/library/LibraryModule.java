@@ -11,5 +11,7 @@ public class LibraryModule extends AbstractModule {
   protected void configure() {
     bind(VcfParser.class).to(VcfParserImpl.class);
     bind(HeaderReader.class).to(DummyHeaderReader.class);
+    bind(BigQueryRowGenerator.class).to(BigQueryRowGeneratorImpl.class);
+    bind(VariantToBqUtils.class).to(VariantToBqUtilsImpl.class);
   }
 }

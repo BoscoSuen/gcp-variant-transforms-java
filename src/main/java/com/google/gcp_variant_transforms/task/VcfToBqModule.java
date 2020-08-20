@@ -57,7 +57,6 @@ public class VcfToBqModule extends AbstractModule {
     install(new LibraryModule());
     bind(Task.class).to(VcfToBqTask.class);
     bind(PipelineRunner.class).to(VcfToBqPipelineRunner.class);
-    bind(BigQueryRowGenerator.class).to(BigQueryRowGeneratorImpl.class);
     bind(new TypeLiteral<ImmutableList<String>>() {})
         .annotatedWith(Args.class)
         .toInstance(this.args);
