@@ -8,11 +8,8 @@ import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.GenotypesContext;
 import htsjdk.variant.variantcontext.VariantContext;
-import htsjdk.variant.vcf.VCFFormatHeaderLine;
-import htsjdk.variant.vcf.VCFHeader;
-import htsjdk.variant.vcf.VCFHeaderLineCount;
-import htsjdk.variant.vcf.VCFHeaderLineType;
-import htsjdk.variant.vcf.VCFInfoHeaderLine;
+import htsjdk.variant.vcf.*;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -22,18 +19,17 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Utility methods for write values with defined value type into Big Query rows.
+ * Implementation class for {@link VariantToBqUtils}. It provides functionalities to set default
+ * values and convert values to the types defined by VCF Header.
  */
 public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
   public String getReferenceBases(VariantContext variantContext) {
     Allele referenceAllele = variantContext.getReference();
-    // If the ref length is longer than 1, store the ref as a String.
     String referenceBase = referenceAllele.getDisplayString();
     return referenceBase.equals(Constants.MISSING_FIELD_VALUE) ? null : referenceBase;
   }
 
   public String getNames(VariantContext variantContext) {
-    // If the ID field is ".", should write null into BQ row.
     String name = variantContext.getID();
     return name.equals(Constants.MISSING_FIELD_VALUE) ? null : name;
   }
@@ -67,12 +63,8 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     return filters;
   }
 
-  /**
-   * Add variant Info field into BQ table row.
-   * If the info field number in the VCF header is `A`, add it to the ALT sub field.
-   */
   public void addInfo(TableRow row, VariantContext variantContext,
-                             List<TableRow> altMetadata, VCFHeader vcfHeader) {
+                      List<TableRow> altMetadata, VCFHeader vcfHeader) {
     for (Map.Entry<String, Object> entry : variantContext.getAttributes().entrySet()) {
       String attrName = entry.getKey();
       Object value = entry.getValue();
@@ -82,7 +74,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
       if (infoCountType == VCFHeaderLineCount.A || infoCountType == VCFHeaderLineCount.R) {
         // If alternate field is ".", alternate alleles will be empty, expected count will be 1
         int expectedAltCount = variantContext.getAlternateAlleles().size() == 0 ? 1 :
-            variantContext.getAlternateAlleles().size();
+                variantContext.getAlternateAlleles().size();
         if (infoCountType == VCFHeaderLineCount.A) {
           // Put this info into ALT field.
           splitAlternateAlleleInfoFields(attrName, value, altMetadata, infoType, expectedAltCount);
@@ -104,30 +96,24 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     for (Genotype genotype : genotypes) {
       TableRow curRow = new TableRow();
       curRow.set(Constants.ColumnKeyConstants.CALLS_NAME, genotype.getSampleName());
-      addInfoAndPhaseSet(curRow, genotype, vcfHeader);
+      addFormatAndPhaseSet(curRow, genotype, vcfHeader);
       addGenotypes(curRow, genotype.getAlleles(), variantContext);
       callRows.add(curRow);
     }
     return callRows;
   }
 
-  /**
-   * Convert the value to the type defined in the metadata
-   * If the value is an instance of List, iterate the list
-   * and call convertSingleObjectToDefinedType() to convert every value
-   */
   public Object convertToDefinedType(Object value, VCFHeaderLineType type, int count) {
     if (!(value instanceof List)) {
       // Deal with single value.
-      // There are some field values that contains ',' but have not been parsed by HTSJDK,
-      // eg: "HQ" ->"23,27", we need to convert it to list of String and call the convert function.
       if ((value instanceof String) && ((String)value).contains(",")) {
+        // Split string value.
         String valueStr = (String)value;
         return convertToDefinedType(Arrays.asList(valueStr.split(",")), type, count);
       } else if (count > 1) {
         // value is a single value but count > 1, it should raise an exception
         throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-            "VCFHeader");
+                "VCFHeader");
       } else {
         return convertSingleObjectToDefinedType(value, type);
       }
@@ -136,7 +122,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
       List<Object> valueList = (List<Object>)value;
       if (count != Constants.DEFAULT_FIELD_COUNT &&count != valueList.size()) {
         throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-            "VCFHeader");
+                "VCFHeader");
       }
       List<Object> convertedList = new ArrayList<>();
       for (Object val : valueList) {
@@ -146,9 +132,6 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     }
   }
 
-  /**
-   * For a single value Object, convert to the type defined in the metadata
-   */
   public Object convertSingleObjectToDefinedType(Object value, VCFHeaderLineType type) {
     // If value is not a String, the values and its type have already been parsed by VCFCodec
     // decode function.
@@ -174,7 +157,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
   }
 
   public void addGenotypes(TableRow row, List<Allele> alleles,
-                                   VariantContext variantContext) {
+                           VariantContext variantContext) {
     List<Integer> genotypes = new ArrayList<>();
     for (Allele allele : alleles) {
       String alleleStr = allele.getDisplayString();
@@ -187,17 +170,17 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     row.set(Constants.ColumnKeyConstants.CALLS_GENOTYPE, genotypes);
   }
 
-  public void addInfoAndPhaseSet(TableRow row, Genotype genotype, VCFHeader vcfHeader) {
+  public void addFormatAndPhaseSet(TableRow row, Genotype genotype, VCFHeader vcfHeader) {
     String phaseSet = "";
 
-    if (genotype.hasAD()) { row.set("AD", genotype.getAD()); }
-    if (genotype.hasDP()) { row.set("DP", genotype.getDP()); }
-    if (genotype.hasGQ()) { row.set("GQ", genotype.getGQ()); }
-    if (genotype.hasPL()) { row.set("PL", genotype.getPL()); }
+    if (genotype.hasAD()) { row.set(VCFConstants.GENOTYPE_ALLELE_DEPTHS, genotype.getAD()); }
+    if (genotype.hasDP()) { row.set(VCFConstants.DEPTH_KEY, genotype.getDP()); }
+    if (genotype.hasGQ()) { row.set(VCFConstants.GENOTYPE_QUALITY_KEY, genotype.getGQ()); }
+    if (genotype.hasPL()) { row.set(VCFConstants.GENOTYPE_PL_KEY, genotype.getPL()); }
     Map<String, Object> extendedAttributes = genotype.getExtendedAttributes();
     for (String extendedAttr : extendedAttributes.keySet()) {
-      if (extendedAttr.equals(Constants.PHASESET_FORMAT_KEY)) {
-        String phaseSetValue = extendedAttributes.get(Constants.PHASESET_FORMAT_KEY).toString();
+      if (extendedAttr.equals(VCFConstants.PHASE_SET_KEY)) {
+        String phaseSetValue = extendedAttributes.get(VCFConstants.PHASE_SET_KEY).toString();
         phaseSet = phaseSetValue.equals(Constants.MISSING_FIELD_VALUE) ? null : phaseSetValue;
       } else {
         // The rest of fields need to be converted to the right type by VCFCodec decode function.
@@ -206,11 +189,11 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
         VCFHeaderLineCount formatCountType = formatMetadata.getCountType();
         if (formatCountType == VCFHeaderLineCount.INTEGER) {
           row.set(extendedAttr, convertToDefinedType(extendedAttributes.get(extendedAttr),
-              formatType, formatMetadata.getCount()));
+                  formatType, formatMetadata.getCount()));
         } else {
           // If field number in the VCFHeader is ".", should pass a default count
           row.set(extendedAttr, convertToDefinedType(extendedAttributes.get(extendedAttr),
-              formatType, Constants.DEFAULT_FIELD_COUNT));
+                  formatType, Constants.DEFAULT_FIELD_COUNT));
         }
       }
     }
@@ -229,17 +212,11 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
       List<Object> valList = (List<Object>)value;
       if (count != valList.size()) {
         throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-            "VCFHeader");
+                "VCFHeader");
       }
-      // If the alt field element size > 1, thus the value should be list and the size should be
-      // equal to the alt field size.
-      // But if alt field is ".", the altMetadata has only one TableRow with {"alt": null},
-      // for every value in value list, they should add more {"alt": null} subrow if needed.
-      // eg: altMetadata: {"alt": null}, alt info: AF=0.333,0.667
-      // The result tableRow should be {"alt": null, AF=0.333}, {"alt":null, AF=0.667}.
       for (int i = 0; i < valList.size(); ++i) {
         if (i >= altMetadata.size()) {
-          // should add more sub rows in alt field
+          // Match each field in each repeated subRow.
           altMetadata.add(new TableRow());
           altMetadata.get(i).set(Constants.ColumnKeyConstants.ALTERNATE_BASES_ALT, null);
         }
@@ -249,10 +226,14 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     } else {
       if (count != 1) {
         throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-            "VCFHeader");
+                "VCFHeader");
       }
       // The alt field element size == 1, thus the value should be a single list.
       altMetadata.get(0).set(attrName, convertSingleObjectToDefinedType(value, type));
     }
+  }
+
+  public String replaceMissingWithNull(String value) {
+    return value.equals(Constants.MISSING_FIELD_VALUE) ? null : value;
   }
 }
