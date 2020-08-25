@@ -16,6 +16,7 @@ import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.GenotypesContext;
 import htsjdk.variant.variantcontext.VariantContext;
+import htsjdk.variant.vcf.VCFConstants;
 import htsjdk.variant.vcf.VCFFormatHeaderLine;
 import htsjdk.variant.vcf.VCFHeader;
 import htsjdk.variant.vcf.VCFHeaderLineCount;
@@ -24,6 +25,7 @@ import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -50,7 +52,6 @@ public class VariantToBqUtilsTest {
   Genotype sample;
   Allele firstGenotypeAllele;
   Allele secondGenotypeAllele;
-  Map<String, Object> extendedAttributes = new HashMap<>();
 
   @Rule
   public final GuiceBerryRule guiceBerry = new GuiceBerryRule(TestEnv.class);
@@ -71,35 +72,58 @@ public class VariantToBqUtilsTest {
   /**
    * Mock VCF Header Lines:
    * ##INFO=<ID=NS,Number=1,Type=Integer,Description="Number of Samples With Data">
-   * ##INFO=<ID=DP,Number=1,Type=Integer,Description="Total Depth">
    * ##INFO=<ID=AF,Number=.,Type=Float,Description="Allele Frequency">
+   * ##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+   * ##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Read Depth">
    * ##FORMAT=<ID=HQ,Number=2,Type=Integer,Description="Haplotype Quality">
    */
   @Before
   public void mockVCFHeader() {
     VCFInfoHeaderLine NSMetadata = mock(VCFInfoHeaderLine.class);
-    when(vcfHeader.getInfoHeaderLine("NS")).thenReturn(NSMetadata);
+    when(vcfHeader.getInfoHeaderLine(VCFConstants.SAMPLE_NUMBER_KEY)).thenReturn(NSMetadata);
+    when(NSMetadata.getID()).thenReturn(VCFConstants.SAMPLE_NUMBER_KEY);
     when(NSMetadata.getType()).thenReturn(VCFHeaderLineType.Integer);
     when(NSMetadata.getCountType()).thenReturn(VCFHeaderLineCount.INTEGER);
     when(NSMetadata.getCount()).thenReturn(1);
 
     VCFInfoHeaderLine AFMetadata = mock(VCFInfoHeaderLine.class);
-    when(vcfHeader.getInfoHeaderLine("AF")).thenReturn(AFMetadata);
+    when(vcfHeader.getInfoHeaderLine(VCFConstants.ALLELE_FREQUENCY_KEY)).thenReturn(AFMetadata);
+    when(AFMetadata.getID()).thenReturn(VCFConstants.ALLELE_FREQUENCY_KEY);
     when(AFMetadata.getType()).thenReturn(VCFHeaderLineType.Float);
     when(AFMetadata.getCountType()).thenReturn(VCFHeaderLineCount.A);
 
+    when(vcfHeader.getInfoHeaderLines()).thenReturn(Arrays.asList(NSMetadata, AFMetadata));
+
     // Mock VCF header in Calls.
+    VCFFormatHeaderLine GTMetadata = mock(VCFFormatHeaderLine.class);
+    when(vcfHeader.getFormatHeaderLine(VCFConstants.GENOTYPE_KEY)).thenReturn(GTMetadata);
+    when(GTMetadata.getID()).thenReturn(VCFConstants.GENOTYPE_KEY);
+    when(GTMetadata.getType()).thenReturn(VCFHeaderLineType.String);
+    when(GTMetadata.getCountType()).thenReturn(VCFHeaderLineCount.INTEGER);
+    when(GTMetadata.getCount()).thenReturn(1);
+
     VCFFormatHeaderLine DPMetadata = mock(VCFFormatHeaderLine.class);
-    when(vcfHeader.getFormatHeaderLine("DP")).thenReturn(DPMetadata);
+    when(vcfHeader.getFormatHeaderLine(VCFConstants.DEPTH_KEY)).thenReturn(DPMetadata);
+    when(DPMetadata.getID()).thenReturn(VCFConstants.DEPTH_KEY);
     when(DPMetadata.getType()).thenReturn(VCFHeaderLineType.Integer);
     when(DPMetadata.getCountType()).thenReturn(VCFHeaderLineCount.INTEGER);
     when(DPMetadata.getCount()).thenReturn(1);
 
+    VCFFormatHeaderLine PSMetadata = mock(VCFFormatHeaderLine.class);
+    when(vcfHeader.getFormatHeaderLine(VCFConstants.PHASE_SET_KEY)).thenReturn(PSMetadata);
+    when(PSMetadata.getID()).thenReturn(VCFConstants.PHASE_SET_KEY);
+    when(PSMetadata.getType()).thenReturn(VCFHeaderLineType.String);
+    when(PSMetadata.getCountType()).thenReturn(VCFHeaderLineCount.INTEGER);
+    when(PSMetadata.getCount()).thenReturn(1);
+
     VCFFormatHeaderLine HQMetadata = mock(VCFFormatHeaderLine.class);
-    when(vcfHeader.getFormatHeaderLine("HQ")).thenReturn(HQMetadata);
+    when(vcfHeader.getFormatHeaderLine(VCFConstants.HAPLOTYPE_QUALITY_KEY)).thenReturn(HQMetadata);
+    when(HQMetadata.getID()).thenReturn(VCFConstants.HAPLOTYPE_QUALITY_KEY);
     when(HQMetadata.getType()).thenReturn(VCFHeaderLineType.Integer);
     when(HQMetadata.getCountType()).thenReturn(VCFHeaderLineCount.INTEGER);
     when(HQMetadata.getCount()).thenReturn(2);
+
+    when(vcfHeader.getFormatHeaderLines()).thenReturn(Arrays.asList(GTMetadata, DPMetadata, PSMetadata, HQMetadata));
   }
 
   /**
@@ -117,15 +141,13 @@ public class VariantToBqUtilsTest {
     when(variantContext.getAlleleIndex(secondGenotypeAllele)).thenReturn(2);
     when(sample.getAlleles()).thenReturn(Arrays.asList(firstGenotypeAllele, secondGenotypeAllele));
 
-    // Mock info.
-    when(sample.hasAD()).thenReturn(false);
-    when(sample.hasDP()).thenReturn(true);
-    when(sample.getDP()).thenReturn(1);
-    when(sample.hasGQ()).thenReturn(false);
-    when(sample.hasPL()).thenReturn(false);
-    extendedAttributes.put("HQ", "23,27");
-    extendedAttributes.put("PS", "0");
-    when(sample.getExtendedAttributes()).thenReturn(extendedAttributes);
+    // Mock sample.
+    when(sample.hasAnyAttribute(VCFConstants.DEPTH_KEY)).thenReturn(true);
+    when(sample.getAnyAttribute(VCFConstants.DEPTH_KEY)).thenReturn(1);
+    when(sample.hasAnyAttribute(VCFConstants.HAPLOTYPE_QUALITY_KEY)).thenReturn(true);
+    when(sample.getAnyAttribute(VCFConstants.HAPLOTYPE_QUALITY_KEY)).thenReturn("23,27");
+    when(sample.hasAnyAttribute(VCFConstants.PHASE_SET_KEY)).thenReturn(true);
+    when(sample.getAnyAttribute(VCFConstants.PHASE_SET_KEY)).thenReturn("0");
 
     // Add sample to genotypeContext.
     Iterator<Genotype> genotypeIterator = mock(Iterator.class);
@@ -201,7 +223,7 @@ public class VariantToBqUtilsTest {
     when(variantContext.getID()).thenReturn(TEST_ID);
     assertThat(variantToBqUtils.getNames(variantContext)).isEqualTo(TEST_ID);
     // Test empty fields.
-    when(variantContext.getID()).thenReturn(Constants.MISSING_FIELD_VALUE);
+    when(variantContext.getID()).thenReturn(VCFConstants.MISSING_VALUE_v4);
     assertThat(variantToBqUtils.getNames(variantContext)).isNull();
 
   }
@@ -235,10 +257,10 @@ public class VariantToBqUtilsTest {
    */
   @Test
   public void testAddInfo_whenCheckingAltAndInfoFieldElements_thenTrue() {
-    Map<String, Object> info = new HashMap<>();
-    info.put("NS", "2");
-    info.put("AF", "0.333");
-    when(variantContext.getAttributes()).thenReturn(info);
+    when(variantContext.hasAttribute(VCFConstants.SAMPLE_NUMBER_KEY)).thenReturn(true);
+    when(variantContext.getAttribute(VCFConstants.SAMPLE_NUMBER_KEY)).thenReturn("2");
+    when(variantContext.hasAttribute(VCFConstants.ALLELE_FREQUENCY_KEY)).thenReturn(true);
+    when(variantContext.getAttribute(VCFConstants.ALLELE_FREQUENCY_KEY)).thenReturn("0.333");
 
     // Mock alt field.
     List<TableRow> altMetadata = new ArrayList<>();
@@ -287,14 +309,13 @@ public class VariantToBqUtilsTest {
   public void testAddCallsWithEmptyFields_whenCheckingGenotypeElements_thenTrue() {
     // Second record: contains empty fields.
     // Mock unknown genotypes.
-    when(firstGenotypeAllele.getDisplayString()).thenReturn(Constants.MISSING_FIELD_VALUE);
-    when(secondGenotypeAllele.getDisplayString()).thenReturn(Constants.MISSING_FIELD_VALUE);
+    when(firstGenotypeAllele.getDisplayString()).thenReturn(VCFConstants.MISSING_VALUE_v4);
+    when(secondGenotypeAllele.getDisplayString()).thenReturn(VCFConstants.MISSING_VALUE_v4);
     when(sample.getAlleles()).thenReturn(Arrays.asList(firstGenotypeAllele, secondGenotypeAllele));
 
     // Mock empty info fields.
-    extendedAttributes.remove("PS");
-    extendedAttributes.put("HQ",".,.");
-    when(sample.getExtendedAttributes()).thenReturn(extendedAttributes);
+    when(sample.hasAnyAttribute(VCFConstants.PHASE_SET_KEY)).thenReturn(false); // No phase set presented.
+    when(sample.getAnyAttribute(VCFConstants.HAPLOTYPE_QUALITY_KEY)).thenReturn(".,.");
 
     // Add sample to genotypeContext.
     when(genotypesContext.iterator().hasNext()).thenReturn(true, false);

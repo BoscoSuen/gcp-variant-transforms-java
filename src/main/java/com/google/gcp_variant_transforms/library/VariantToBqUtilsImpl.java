@@ -8,8 +8,12 @@ import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.GenotypesContext;
 import htsjdk.variant.variantcontext.VariantContext;
-import htsjdk.variant.vcf.*;
-
+import htsjdk.variant.vcf.VCFConstants;
+import htsjdk.variant.vcf.VCFFormatHeaderLine;
+import htsjdk.variant.vcf.VCFHeader;
+import htsjdk.variant.vcf.VCFHeaderLineCount;
+import htsjdk.variant.vcf.VCFHeaderLineType;
+import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,12 +30,12 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
   public String getReferenceBases(VariantContext variantContext) {
     Allele referenceAllele = variantContext.getReference();
     String referenceBase = referenceAllele.getDisplayString();
-    return referenceBase.equals(Constants.MISSING_FIELD_VALUE) ? null : referenceBase;
+    return replaceMissingWithNull(referenceBase);
   }
 
   public String getNames(VariantContext variantContext) {
     String name = variantContext.getID();
-    return name.equals(Constants.MISSING_FIELD_VALUE) ? null : name;
+    return replaceMissingWithNull(name);
   }
 
   public List<TableRow> getAlternateBases(VariantContext variantContext) {
@@ -65,27 +69,30 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
 
   public void addInfo(TableRow row, VariantContext variantContext,
                       List<TableRow> altMetadata, VCFHeader vcfHeader) {
-    for (Map.Entry<String, Object> entry : variantContext.getAttributes().entrySet()) {
-      String attrName = entry.getKey();
-      Object value = entry.getValue();
-      VCFInfoHeaderLine infoMetadata = vcfHeader.getInfoHeaderLine(attrName);
-      VCFHeaderLineType infoType = infoMetadata.getType();
-      VCFHeaderLineCount infoCountType = infoMetadata.getCountType();
-      if (infoCountType == VCFHeaderLineCount.A || infoCountType == VCFHeaderLineCount.R) {
-        // If alternate field is ".", alternate alleles will be empty, expected count will be 1
-        int expectedAltCount = variantContext.getAlternateAlleles().size() == 0 ? 1 :
-                variantContext.getAlternateAlleles().size();
-        if (infoCountType == VCFHeaderLineCount.A) {
-          // Put this info into ALT field.
-          splitAlternateAlleleInfoFields(attrName, value, altMetadata, infoType, expectedAltCount);
+    // Iterate all Info field in VCFHeader, if current record does not have the field, skip it.
+    for (VCFInfoHeaderLine infoHeaderLine : vcfHeader.getInfoHeaderLines()) {
+      String attrName = infoHeaderLine.getID();
+      if (variantContext.hasAttribute(attrName)) {
+        Object value = variantContext.getAttribute(attrName);
+        VCFInfoHeaderLine infoMetadata = vcfHeader.getInfoHeaderLine(attrName);
+        VCFHeaderLineType infoType = infoMetadata.getType();
+        VCFHeaderLineCount infoCountType = infoMetadata.getCountType();
+        if (infoCountType == VCFHeaderLineCount.A || infoCountType == VCFHeaderLineCount.R) {
+          // If alternate field is ".", alternate alleles will be empty, expected count will be 1
+          int expectedAltCount = variantContext.getAlternateAlleles().size() == 0 ? 1 :
+                  variantContext.getAlternateAlleles().size();
+          if (infoCountType == VCFHeaderLineCount.A) {
+            // Put this info into ALT field.
+            splitAlternateAlleleInfoFields(attrName, value, altMetadata, infoType, expectedAltCount);
+          } else {
+            // field count should count all alleles, which is expectedAltCount plus reference.
+            row.set(attrName, convertToDefinedType(value, infoType, expectedAltCount + 1));
+          }
+        } else if (infoCountType == VCFHeaderLineCount.INTEGER){
+          row.set(attrName, convertToDefinedType(value, infoType, infoMetadata.getCount()));
         } else {
-          // field count should count all alleles, which is expectedAltCount plus reference.
-          row.set(attrName, convertToDefinedType(value, infoType, expectedAltCount + 1));
+          row.set(attrName, convertToDefinedType(value, infoType, Constants.DEFAULT_FIELD_COUNT));
         }
-      } else if (infoCountType == VCFHeaderLineCount.INTEGER){
-        row.set(attrName, convertToDefinedType(value, infoType, infoMetadata.getCount()));
-      } else {
-        row.set(attrName, convertToDefinedType(value, infoType, Constants.DEFAULT_FIELD_COUNT));
       }
     }
   }
@@ -120,7 +127,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     } else {
       // Deal with list of values.
       List<Object> valueList = (List<Object>)value;
-      if (count != Constants.DEFAULT_FIELD_COUNT &&count != valueList.size()) {
+      if (count != Constants.DEFAULT_FIELD_COUNT && count != valueList.size()) {
         throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
                 "VCFHeader");
       }
@@ -141,7 +148,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
 
     String valueStr = (String)value;
     valueStr = valueStr.trim();   // For cases like " 27", ignore the space in list element.
-    if (valueStr.equals(Constants.MISSING_FIELD_VALUE)) {
+    if (valueStr.equals(VCFConstants.MISSING_VALUE_v4)) {
       return null;
     }
 
@@ -161,7 +168,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     List<Integer> genotypes = new ArrayList<>();
     for (Allele allele : alleles) {
       String alleleStr = allele.getDisplayString();
-      if (alleleStr.equals(Constants.MISSING_FIELD_VALUE)) {
+      if (alleleStr.equals(VCFConstants.MISSING_VALUE_v4)) {
         genotypes.add(Constants.MISSING_GENOTYPE_VALUE);
       } else {
         genotypes.add(variantContext.getAlleleIndex(allele));
@@ -172,33 +179,40 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
 
   public void addFormatAndPhaseSet(TableRow row, Genotype genotype, VCFHeader vcfHeader) {
     String phaseSet = "";
-
-    if (genotype.hasAD()) { row.set(VCFConstants.GENOTYPE_ALLELE_DEPTHS, genotype.getAD()); }
-    if (genotype.hasDP()) { row.set(VCFConstants.DEPTH_KEY, genotype.getDP()); }
-    if (genotype.hasGQ()) { row.set(VCFConstants.GENOTYPE_QUALITY_KEY, genotype.getGQ()); }
-    if (genotype.hasPL()) { row.set(VCFConstants.GENOTYPE_PL_KEY, genotype.getPL()); }
-    Map<String, Object> extendedAttributes = genotype.getExtendedAttributes();
-    for (String extendedAttr : extendedAttributes.keySet()) {
-      if (extendedAttr.equals(VCFConstants.PHASE_SET_KEY)) {
-        String phaseSetValue = extendedAttributes.get(VCFConstants.PHASE_SET_KEY).toString();
-        phaseSet = phaseSetValue.equals(Constants.MISSING_FIELD_VALUE) ? null : phaseSetValue;
-      } else {
-        // The rest of fields need to be converted to the right type by VCFCodec decode function.
-        VCFFormatHeaderLine formatMetadata = vcfHeader.getFormatHeaderLine(extendedAttr);
-        VCFHeaderLineType formatType = formatMetadata.getType();
-        VCFHeaderLineCount formatCountType = formatMetadata.getCountType();
-        if (formatCountType == VCFHeaderLineCount.INTEGER) {
-          row.set(extendedAttr, convertToDefinedType(extendedAttributes.get(extendedAttr),
-                  formatType, formatMetadata.getCount()));
+    // Iterate all format fields in VCFHeader
+    for (VCFFormatHeaderLine formatHeaderLine : vcfHeader.getFormatHeaderLines()) {
+      String fieldName = formatHeaderLine.getID();
+      if (fieldName.equals(VCFConstants.GENOTYPE_KEY)) {
+        continue; // We will set GT field in a separate "genotype" field in BQ row.
+      }
+      if (genotype.hasAnyAttribute(fieldName)) {
+        Object value = genotype.getAnyAttribute(fieldName);
+        if (fieldName.equals(VCFConstants.GENOTYPE_ALLELE_DEPTHS) || fieldName.equals(VCFConstants.DEPTH_KEY) ||
+              fieldName.equals(VCFConstants.GENOTYPE_QUALITY_KEY) || fieldName.equals(VCFConstants.GENOTYPE_PL_KEY)) {
+          // These four field values have been pre-processed in Genotype.
+          row.set(fieldName, value);
+        } else if (fieldName.equals(VCFConstants.PHASE_SET_KEY)) {
+          String phaseSetValue = genotype.getAnyAttribute(VCFConstants.PHASE_SET_KEY).toString();
+          phaseSet = replaceMissingWithNull(phaseSetValue);
         } else {
-          // If field number in the VCFHeader is ".", should pass a default count
-          row.set(extendedAttr, convertToDefinedType(extendedAttributes.get(extendedAttr),
-                  formatType, Constants.DEFAULT_FIELD_COUNT));
+          // The rest of fields need to be converted to the right type as VCFHeader specifies.
+          VCFFormatHeaderLine formatMetadata = vcfHeader.getFormatHeaderLine(fieldName);
+          VCFHeaderLineType formatType = formatMetadata.getType();
+          VCFHeaderLineCount formatCountType = formatMetadata.getCountType();
+          if (formatCountType == VCFHeaderLineCount.INTEGER) {
+            row.set(fieldName, convertToDefinedType(genotype.getAnyAttribute(fieldName),
+                    formatType, formatMetadata.getCount()));
+          } else {
+            // If field number in the VCFHeader is ".", should pass a default count and do not check if count is equal
+            // to the size of value.
+            row.set(fieldName, convertToDefinedType(genotype.getAnyAttribute(fieldName),
+                    formatType, Constants.DEFAULT_FIELD_COUNT));
+          }
         }
       }
     }
-    if (phaseSet == null || phaseSet.length() != 0) {
-      // PhaseSet is presented(MISSING_FIELD_VALUE('.') or real value).
+    if (phaseSet == null || !phaseSet.isEmpty()) {
+      // PhaseSet is presented(MISSING_FIELD_VALUE('.') or a specific value).
       row.set(Constants.ColumnKeyConstants.CALLS_PHASESET, phaseSet);
     } else {
       row.set(Constants.ColumnKeyConstants.CALLS_PHASESET, Constants.DEFAULT_PHASESET);
@@ -234,6 +248,6 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
   }
 
   public String replaceMissingWithNull(String value) {
-    return value.equals(Constants.MISSING_FIELD_VALUE) ? null : value;
+    return value.equals(VCFConstants.MISSING_VALUE_v4) ? null : value;
   }
 }
