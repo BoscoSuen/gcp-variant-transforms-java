@@ -23,11 +23,12 @@ public interface VariantToBqUtils {
   public String getReferenceBases(VariantContext variantContext);
 
   /**
-   * Get names from VariantContext's ID field. Set null in this field if there is missing value.
+   * Get names from VariantContext's ID field. It should be a semi-colon separated list of unique identifiers
+   * where available. In each separated ID, set null in this field if there is missing value.
    * @param variantContext
-   * @return names after handling missing value.
+   * @return List of names after handling missing value.
    */
-  public String getNames(VariantContext variantContext);
+  public List<String> getNames(VariantContext variantContext);
 
   /**
    * Get alternate allele bases. Set null in this field if there is missing value.
@@ -53,7 +54,7 @@ public interface VariantToBqUtils {
    * @param vcfHeader
    */
   public void addInfo(TableRow row, VariantContext variantContext, List<TableRow> altMetadata,
-                      VCFHeader vcfHeader);
+                      VCFHeader vcfHeader, int expectedAltCount);
 
   /**
    * Add calls(samples) in the table row with {@link VCFHeader} defined value type and count.

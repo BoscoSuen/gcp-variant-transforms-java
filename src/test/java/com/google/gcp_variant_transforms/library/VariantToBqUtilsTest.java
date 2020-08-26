@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.gcp_variant_transforms.TestEnv;
 import com.google.gcp_variant_transforms.common.Constants;
+import com.google.gcp_variant_transforms.exceptions.CountNotMatchException;
 import com.google.guiceberry.junit4.GuiceBerryRule;
 import com.google.inject.Inject;
 import htsjdk.variant.variantcontext.Allele;
@@ -25,20 +26,19 @@ import htsjdk.variant.vcf.VCFInfoHeaderLine;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 
 /**
  * Units tests for VariantToBqUtilsImpl.java
  */
 public class VariantToBqUtilsTest {
-  private static final String TEST_ID= "id";
+  private static final String TEST_ID = "id";
+  private static final String TEST_ID_WITH_SEMI_COLON = "id;id";
   private static final String TEST_REFERENCE_BASES = "G";
   private static final String TEST_ALTERNATE_BASES = "A";
   private static final String TEST_CALLS_NAME = "sample";
@@ -195,10 +195,9 @@ public class VariantToBqUtilsTest {
 
     // Test value count does not match the number in the VCFHeader which will raise an exception
     int invalidCount = 2;
-    Exception countNotMatchException = assertThrows(IndexOutOfBoundsException.class, () ->
+    Exception countNotMatchException = assertThrows(CountNotMatchException.class, () ->
             variantToBqUtils.convertToDefinedType(str, VCFHeaderLineType.String, invalidCount));
-    assertThat(countNotMatchException).hasMessageThat().contains("Value count does not match the " +
-            "count defined by VCFHeader");
+    assertThat(countNotMatchException).hasMessageThat().contains("not match the count defined by VCFHeader");
 
     // Test value type does not match the type in the VCFHeader which will raise an exception
     String invalidFloatStr = "1.5";
@@ -221,10 +220,16 @@ public class VariantToBqUtilsTest {
   @Test
   public void testGetNames_whenComparingElement_thenTrue() {
     when(variantContext.getID()).thenReturn(TEST_ID);
-    assertThat(variantToBqUtils.getNames(variantContext)).isEqualTo(TEST_ID);
+    assertThat(variantToBqUtils.getNames(variantContext)).isEqualTo(Collections.singletonList(TEST_ID));
+
+    // Test ID with semi-colon:
+    when(variantContext.getID()).thenReturn(TEST_ID_WITH_SEMI_COLON);
+    assertThat(variantToBqUtils.getNames(variantContext).size()).isEqualTo(2);
+    assertThat(variantToBqUtils.getNames(variantContext)).contains(TEST_ID);
+
     // Test empty fields.
     when(variantContext.getID()).thenReturn(VCFConstants.MISSING_VALUE_v4);
-    assertThat(variantToBqUtils.getNames(variantContext)).isNull();
+    assertThat(variantToBqUtils.getNames(variantContext)).isEqualTo(Collections.singletonList(null));
 
   }
 
@@ -268,7 +273,7 @@ public class VariantToBqUtilsTest {
     altMetadata.get(0).set(Constants.ColumnKeyConstants.ALTERNATE_BASES_ALT, TEST_ALTERNATE_BASES);
 
     TableRow row = new TableRow();
-    variantToBqUtils.addInfo(row, variantContext, altMetadata, vcfHeader);
+    variantToBqUtils.addInfo(row, variantContext, altMetadata, vcfHeader, 1);
 
     assertThat(row.containsKey("NS")).isTrue();
     assertThat(row.get("NS")).isEqualTo(TEST_NS);

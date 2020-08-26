@@ -115,7 +115,7 @@ public class BigQueryRowGeneratorTest {
     assertThat(rowWithFieldValues.get(Constants.ColumnKeyConstants.END_POSITION))
         .isEqualTo(TEST_END);
     assertThat(rowWithFieldValues.get(Constants.ColumnKeyConstants.NAMES))
-        .isEqualTo(TEST_ID);
+        .isEqualTo(Collections.singletonList(TEST_ID));
     assertThat(rowWithFieldValues.get(Constants.ColumnKeyConstants.REFERENCE_BASES))
         .isEqualTo(TEST_REFERENCE_BASES);
     assertThat(rowWithFieldValues.get(Constants.ColumnKeyConstants.QUALITY)).isEqualTo(29);
@@ -158,7 +158,7 @@ public class BigQueryRowGeneratorTest {
   @Test
   public void testBigQueryRowWithEmptyFields_whenCheckingRowElements_thenTrue() {
     // ID field is ".", which should be null in the BQ row.
-    assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.NAMES)).isNull();
+    assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.NAMES)).isEqualTo(Collections.singletonList(null));
 
     // Quality field is ".", which should be -10 in the BQ row.
     assertThat(rowWithEmptyFields.get(Constants.ColumnKeyConstants.QUALITY))

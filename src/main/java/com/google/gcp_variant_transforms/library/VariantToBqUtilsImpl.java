@@ -4,6 +4,7 @@ package com.google.gcp_variant_transforms.library;
 
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.gcp_variant_transforms.common.Constants;
+import com.google.gcp_variant_transforms.exceptions.CountNotMatchException;
 import htsjdk.variant.variantcontext.Allele;
 import htsjdk.variant.variantcontext.Genotype;
 import htsjdk.variant.variantcontext.GenotypesContext;
@@ -19,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -33,9 +33,14 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     return replaceMissingWithNull(referenceBase);
   }
 
-  public String getNames(VariantContext variantContext) {
-    String name = variantContext.getID();
-    return replaceMissingWithNull(name);
+  public List<String> getNames(VariantContext variantContext) {
+    String names = variantContext.getID();
+    String[] splittedNamesBySemiColon = names.split(";");
+    List<String> nameList = new ArrayList<>();
+    for (String name : splittedNamesBySemiColon) {
+      nameList.add(replaceMissingWithNull(name));
+    }
+    return nameList;
   }
 
   public List<TableRow> getAlternateBases(VariantContext variantContext) {
@@ -68,7 +73,7 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
   }
 
   public void addInfo(TableRow row, VariantContext variantContext,
-                      List<TableRow> altMetadata, VCFHeader vcfHeader) {
+                      List<TableRow> altMetadata, VCFHeader vcfHeader, int expectedAltCount) {
     // Iterate all Info field in VCFHeader, if current record does not have the field, skip it.
     for (VCFInfoHeaderLine infoHeaderLine : vcfHeader.getInfoHeaderLines()) {
       String attrName = infoHeaderLine.getID();
@@ -79,8 +84,6 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
         VCFHeaderLineCount infoCountType = infoMetadata.getCountType();
         if (infoCountType == VCFHeaderLineCount.A || infoCountType == VCFHeaderLineCount.R) {
           // If alternate field is ".", alternate alleles will be empty, expected count will be 1
-          int expectedAltCount = variantContext.getAlternateAlleles().size() == 0 ? 1 :
-                  variantContext.getAlternateAlleles().size();
           if (infoCountType == VCFHeaderLineCount.A) {
             // Put this info into ALT field.
             splitAlternateAlleleInfoFields(attrName, value, altMetadata, infoType, expectedAltCount);
@@ -91,6 +94,8 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
         } else if (infoCountType == VCFHeaderLineCount.INTEGER){
           row.set(attrName, convertToDefinedType(value, infoType, infoMetadata.getCount()));
         } else {
+          // infoCountType is 'G' or '.', which we pass default count and we do not check if the count matches the
+          // expected count.
           row.set(attrName, convertToDefinedType(value, infoType, Constants.DEFAULT_FIELD_COUNT));
         }
       }
@@ -119,8 +124,8 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
         return convertToDefinedType(Arrays.asList(valueStr.split(",")), type, count);
       } else if (count > 1) {
         // value is a single value but count > 1, it should raise an exception
-        throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-                "VCFHeader");
+        throw new CountNotMatchException("Value \"" + value + "\" size does not match the count defined by " +
+            "VCFHeader");
       } else {
         return convertSingleObjectToDefinedType(value, type);
       }
@@ -128,8 +133,8 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
       // Deal with list of values.
       List<Object> valueList = (List<Object>)value;
       if (count != Constants.DEFAULT_FIELD_COUNT && count != valueList.size()) {
-        throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-                "VCFHeader");
+        throw new CountNotMatchException("Value \"" + value + "\" size does not match the count defined by " +
+            "VCFHeader");
       }
       List<Object> convertedList = new ArrayList<>();
       for (Object val : valueList) {
@@ -201,12 +206,12 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
           VCFHeaderLineCount formatCountType = formatMetadata.getCountType();
           if (formatCountType == VCFHeaderLineCount.INTEGER) {
             row.set(fieldName, convertToDefinedType(genotype.getAnyAttribute(fieldName),
-                    formatType, formatMetadata.getCount()));
+                formatType, formatMetadata.getCount()));
           } else {
             // If field number in the VCFHeader is ".", should pass a default count and do not check if count is equal
             // to the size of value.
             row.set(fieldName, convertToDefinedType(genotype.getAnyAttribute(fieldName),
-                    formatType, Constants.DEFAULT_FIELD_COUNT));
+                formatType, Constants.DEFAULT_FIELD_COUNT));
           }
         }
       }
@@ -225,8 +230,8 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
     if (value instanceof List) {
       List<Object> valList = (List<Object>)value;
       if (count != valList.size()) {
-        throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-                "VCFHeader");
+        throw new CountNotMatchException("Value \"" + value + "\" size does not match the count defined by " +
+            "VCFHeader");
       }
       for (int i = 0; i < valList.size(); ++i) {
         if (i >= altMetadata.size()) {
@@ -239,8 +244,8 @@ public class VariantToBqUtilsImpl implements VariantToBqUtils, Serializable {
       }
     } else {
       if (count != 1) {
-        throw new IndexOutOfBoundsException("Value count does not match the count defined by " +
-                "VCFHeader");
+        throw new CountNotMatchException("Value \"" + value + "\" size does not match the count defined by " +
+            "VCFHeader");
       }
       // The alt field element size == 1, thus the value should be a single list.
       altMetadata.get(0).set(attrName, convertSingleObjectToDefinedType(value, type));
