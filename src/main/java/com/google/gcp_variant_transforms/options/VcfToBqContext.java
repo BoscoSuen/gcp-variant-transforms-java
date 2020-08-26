@@ -16,6 +16,7 @@ public class VcfToBqContext extends AbstractContext {
 
   private final String inputFile;
   private final String output;
+  private final Boolean allowMalformedRecords;
   private ImmutableList<String> headerLines = null;
   private VCFHeader vcfHeader = null;
 
@@ -24,6 +25,7 @@ public class VcfToBqContext extends AbstractContext {
     super((PipelineOptions) options);
     this.inputFile = options.getInputFile();
     this.output = options.getOutput();
+    this.allowMalformedRecords = options.getAllowMalformedRecords();
     validateFlags();
   }
 
@@ -53,6 +55,10 @@ public class VcfToBqContext extends AbstractContext {
 
   public VCFHeader getVCFHeader(){
     return vcfHeader;
+  }
+
+  public boolean getAllowMalformedRecords() {
+    return this.allowMalformedRecords;
   }
 
   public void setVCFHeader(VCFHeader vcfHeader){

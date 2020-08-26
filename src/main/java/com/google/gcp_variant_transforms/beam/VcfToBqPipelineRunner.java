@@ -18,6 +18,7 @@ import org.apache.beam.sdk.transforms.Filter;
 import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TypeDescriptors;
 
 public final class VcfToBqPipelineRunner implements PipelineRunner {
@@ -45,11 +46,10 @@ public final class VcfToBqPipelineRunner implements PipelineRunner {
         .apply(TextIO.read().from(context.getInputFile()))
         .apply(Filter.by((String inputLine) -> !inputLine.startsWith("#")))
         .apply(ParDo.of(new ConvertLineToVariantFn(vcfParser, context.getHeaderLines())));
-
     PCollection<TableRow> tableRowPCollection = variantContextPCollection
         .apply("VariantContextToBQRow",
             ParDo.of(new ConvertVariantToRowFn(bigQueryRowGenerator,
-                context.getVCFHeader())));
+                context.getVCFHeader(), context.getAllowMalformedRecords())));
 
     tableRowPCollection
         .apply(MapElements
