@@ -14,13 +14,9 @@ Set the flags for your project, and run the gradle command.
 
 Sample Command:
 ```
-GOOGLE_CLOUD_PROJECT=tural-test-runner
-RUNNER=DirectRunner
-INPUT_FILE=gs://gcp-variant-transforms-testfiles/small_tests/valid-4.0.vcf
-JOB_NAME=java-test-run
-GOOGLE_CLOUD_REGION=us-central1
-TEMP_LOCATION=gs://${GOOGLE_CLOUD_PROJECT}/javawork/temp
 OUTPUT=../output/report
+MALFORMEDRECORDSMESSAGE=../output/error_message
+ALLOW_MALFORMED_RECORDS=true
 
 ./gradlew vcfToBq -Prargs=" \
   --project=${GOOGLE_CLOUD_PROJECT} \
@@ -29,5 +25,7 @@ OUTPUT=../output/report
   --region=${GOOGLE_CLOUD_REGION} \
   --tempLocation=${TEMP_LOCATION} \
   --inputFile=${INPUT_FILE} \
-  --output=${OUTPUT}"
+  --output=${OUTPUT} \
+  --allowMalformedRecords=${ALLOW_MALFORMED_RECORDS} \
+  --malformedRecordsMessage=${MALFORMEDRECORDSMESSAGE}"
 ```

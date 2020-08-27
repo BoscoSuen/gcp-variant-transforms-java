@@ -27,6 +27,11 @@ public interface VcfToBqOptions extends PipelineOptions {
   public Boolean getAllowMalformedRecords();
   void setAllowMalformedRecords(Boolean value);
 
+  @Description("Path of the file of malformed VCF records")
+  @Default.String("")
+  public String getMalformedRecordsMessage();
+  void setMalformedRecordsMessage(String value);
+
   /** Used only for demo, to be deleted. */
   @Description("Path of the file to write to")
   String getOutput();

@@ -11,33 +11,31 @@ import org.apache.beam.sdk.values.TupleTag;
 
 /** {@link DoFn} implementation for a VariantContext to a BigQuery Row. */
 public class ConvertVariantToRowFn extends DoFn<VariantContext, TableRow> {
-  private boolean allowMalformedRecords = true;
+
+  private final boolean allowMalformedRecords;
   private final BigQueryRowGenerator bigQueryRowGenerator;
   private final VCFHeader vcfHeader;
+  private final TupleTag<TableRow> validRecords;
+  private final TupleTag<String> errorMessages;
 
   public ConvertVariantToRowFn(BigQueryRowGenerator bigQueryRowGenerator, VCFHeader vcfHeader,
-                               boolean allowMalformedRecords) {
+                               boolean allowMalformedRecords, TupleTag<TableRow> validRecords,
+                               TupleTag<String> errorMessages) {
     this.bigQueryRowGenerator = bigQueryRowGenerator;
     this.vcfHeader = vcfHeader;
     this.allowMalformedRecords = allowMalformedRecords;
+    this.validRecords = validRecords;
+    this.errorMessages = errorMessages;
   }
-
-  public static final TupleTag<TableRow> VALID_VARIANT_TO_BQ_RECORD_TAG = new TupleTag<>() {
-  };
-
-  public static final TupleTag<TableRow> INVALID_VARIANT_TO_BQ_RECORD_TAG = new TupleTag<>() {
-  };
-
 
   @ProcessElement
   public void processElement(@Element VariantContext variantContext, MultiOutputReceiver receiver) {
     try {
-      receiver.get(VALID_VARIANT_TO_BQ_RECORD_TAG)
+      receiver.get(validRecords)
           .output(bigQueryRowGenerator.convertToBQRow(variantContext, vcfHeader));
     } catch (Exception e) {
       if (allowMalformedRecords) {
-        receiver.get(INVALID_VARIANT_TO_BQ_RECORD_TAG)
-            .output(bigQueryRowGenerator.convertToBQRow(variantContext, vcfHeader));
+        receiver.get(errorMessages).output(e.getMessage());
       } else {
         throw new RuntimeException(e.getMessage());
       }
